@@ -9,6 +9,12 @@ const server = http.createServer((req, res) => {
   res.end('Hello, World!\n');
 });
 
-server.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
-});
+// Only auto-start the server when run directly (not when imported for testing)
+/* istanbul ignore next */
+if (require.main === module) {
+  server.listen(port, hostname, () => {
+    console.log(`Server running at http://${hostname}:${port}/`);
+  });
+}
+
+module.exports = server;
