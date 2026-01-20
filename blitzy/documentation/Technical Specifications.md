@@ -2,779 +2,569 @@
 
 # 0. Agent Action Plan
 
-## 0.1 Intent Clarification
+## 0.1 Executive Summary
 
-This section captures and clarifies the user's requirements, transforming them into precise technical objectives that guide the implementation of the Express.js integration and new endpoint.
+Based on the bug description, the Blitzy platform understands that the bug is **a lack of robust HTTP request processing features in server.js**, specifically:
 
-### 0.1.1 Core Feature Objective
+- **Missing Error Handling**: No custom error handling middleware to catch and format application errors, resulting in default HTML error pages
+- **No Graceful Shutdown**: No signal handlers (SIGTERM/SIGINT) for clean server termination, risking connection interruption and resource leaks
+- **No Input Validation Framework**: While the current routes are simple and don't require input validation, no foundation exists for future expansion
+- **No Resource Cleanup**: No mechanism to properly release server resources during shutdown
+- **Missing 404 Handler**: Non-existent routes return default Express HTML error pages instead of consistent plain text responses
 
-Based on the prompt, the Blitzy platform understands that the new feature requirement is to:
+#### Technical Failure Analysis
 
-- **Integrate Express.js Framework**: Add Express.js as a web framework dependency to the existing Node.js HTTP server project, replacing the built-in `http` module with Express.js for enhanced routing capabilities
-- **Add New Endpoint**: Create an additional HTTP endpoint that returns the response "Good evening" when accessed
-- **Preserve Existing Functionality**: Ensure the existing "Hello, World!" response remains accessible, now served through Express.js routing
+The original `server.js` consists of only 18 lines of code that:
+1. Creates an Express 5.x application
+2. Defines two GET routes (`/` and `/evening`)
+3. Starts the server on port 3000 without capturing the server reference
 
-**Implicit Requirements Detected:**
+**Specific Error Types Identified:**
+- **Configuration Gap**: `app.listen()` return value (server object) was discarded
+- **Missing Middleware**: No error-handling middleware (4-parameter function) registered
+- **No Signal Handling**: No `process.on()` handlers for SIGTERM, SIGINT, uncaughtException, or unhandledRejection
 
-- The existing endpoint serving "Hello, World!" must be migrated from the raw `http` module to Express.js routing
-- The server must maintain the same host (127.0.0.1) and port (3000) configuration for backward compatibility
-- Both endpoints should follow Express.js routing conventions
-- The response content-type should remain `text/plain` to match existing behavior
-
-**Feature Dependencies and Prerequisites:**
-
-| Prerequisite | Status | Description |
-|--------------|--------|-------------|
-| Node.js Runtime | ✓ Available | Node.js v20.x+ installed (currently v20.20.0) |
-| npm Package Manager | ✓ Available | npm v11.1.0 installed |
-| package.json | ✓ Exists | npm package configuration present |
-| Existing Server | ✓ Exists | `server.js` with HTTP server implementation |
-
-### 0.1.2 Special Instructions and Constraints
-
-**Specific Directives Captured:**
-
-- The user explicitly requested Express.js integration (not an alternative framework like Fastify, Koa, or Hapi)
-- The new endpoint should return exactly "Good evening" as the response text
-- This is a tutorial-level project, implying simplicity and clarity are priorities
-
-**Architectural Requirements:**
-
-- Follow CommonJS module patterns (existing code uses `require()` syntax)
-- Maintain minimalist server architecture appropriate for a tutorial project
-- Preserve the existing project structure without introducing unnecessary complexity
-
-**User Example:**
-
-The user described the project as:
-> "this is a tutorial of node js server hosting one endpoint that returns the response 'Hello world'"
-
-This confirms the educational nature of the project and the expectation for straightforward, clean implementation.
-
-### 0.1.3 Technical Interpretation
-
-These feature requirements translate to the following technical implementation strategy:
-
-- **To integrate Express.js**, we will add `express` as a project dependency via npm and refactor `server.js` to use Express application instance and routing
-- **To add the "Good evening" endpoint**, we will create a new route handler using Express.js `app.get()` method that responds with the text "Good evening"
-- **To preserve "Hello world" functionality**, we will migrate the existing response to an Express.js route handler at the root path
-- **To maintain server configuration**, we will use `app.listen()` with the same hostname and port parameters
-
-| Requirement | Technical Action | Target Component |
-|-------------|------------------|------------------|
-| Add Express.js | Install via `npm install express` | package.json, package-lock.json |
-| Migrate HTTP server | Refactor to use Express app instance | server.js |
-| Add root endpoint | Create `app.get('/')` route handler | server.js |
-| Add greeting endpoint | Create `app.get('/evening')` route handler | server.js |
-| Preserve port binding | Use `app.listen(3000, '127.0.0.1')` | server.js |
-
-
-## 0.2 Repository Scope Discovery
-
-This section provides a comprehensive analysis of all repository files that need modification, creation, or review to implement the Express.js integration and new endpoint feature.
-
-### 0.2.1 Comprehensive File Analysis
-
-**Existing Repository Structure:**
-
-```
-/
-├── server.js                    # Main HTTP server (REQUIRES MODIFICATION)
-├── server - Copy.js             # Duplicate server file (OUT OF SCOPE)
-├── package.json                 # npm package manifest (REQUIRES MODIFICATION)
-├── package-lock.json            # npm lock file (AUTO-UPDATED)
-├── README.md                    # Documentation (REQUIRES UPDATE)
-├── LoginTest.java               # Java test stub (OUT OF SCOPE)
-├── LoginTest - Copy.java        # Java test stub copy (OUT OF SCOPE)
-├── industry.csv                 # Reference data (OUT OF SCOPE)
-├── industry - Copy.csv          # Reference data copy (OUT OF SCOPE)
-├── test.py.txt                  # Empty placeholder (OUT OF SCOPE)
-├── test.py - Copy.txt           # Empty placeholder copy (OUT OF SCOPE)
-├── test.txt.txt                 # Empty placeholder (OUT OF SCOPE)
-├── demo.jpg                     # Image file (OUT OF SCOPE)
-├── demo - Copy.jpg              # Image file copy (OUT OF SCOPE)
-├── sample.doc                   # Document file (OUT OF SCOPE)
-├── sample - Copy.doc            # Document file copy (OUT OF SCOPE)
-├── 100Pages.pdf                 # PDF file (OUT OF SCOPE)
-└── 100Pages - Copy.pdf          # PDF file copy (OUT OF SCOPE)
-```
-
-**Files Requiring Modification:**
-
-| File | Type | Action | Purpose |
-|------|------|--------|---------|
-| `server.js` | Source Code | MODIFY | Refactor from raw `http` to Express.js, add new endpoint |
-| `package.json` | Configuration | MODIFY | Add Express.js dependency |
-| `package-lock.json` | Lock File | AUTO-UPDATE | Will be regenerated by npm |
-| `README.md` | Documentation | MODIFY | Document new endpoint and Express.js usage |
-
-**Integration Point Discovery:**
-
-| Integration Point | File Location | Current State | Required Change |
-|-------------------|---------------|---------------|-----------------|
-| HTTP Server Creation | `server.js:6` | `http.createServer()` | Replace with `express()` |
-| Request Handler | `server.js:6-10` | Single inline handler | Convert to route handlers |
-| Port Binding | `server.js:12-14` | `server.listen()` | Change to `app.listen()` |
-| Module Import | `server.js:1` | `require('http')` | Change to `require('express')` |
-| Dependencies | `package.json` | No dependencies | Add `express` dependency |
-
-### 0.2.2 Web Search Research Conducted
-
-Research was conducted to identify best practices and current Express.js versioning:
-
-| Research Topic | Finding | Source |
-|----------------|---------|--------|
-| Express.js Latest Version | 5.2.1 | npm registry |
-| Express.js Node.js Requirement | Node.js 18+ | Express.js GitHub releases |
-| Express.js Module System | CommonJS compatible | Express.js documentation |
-| Routing Best Practices | `app.get()` for GET routes | Express.js documentation |
-
-**Key Technical Findings:**
-
-- Express.js 5.x is now the default version on npm with LTS support
-- Express 5 requires Node.js 18 or higher, compatible with project's Node.js 20.x target
-- Express.js supports both CommonJS and ES Modules, allowing seamless integration with existing `require()` syntax
-- Basic routing uses `app.get(path, handler)` pattern for GET requests
-
-### 0.2.3 New File Requirements
-
-For this tutorial-level feature addition, no new files need to be created. All changes will be applied to existing files:
-
-**Source Files:**
-
-- No new source files required - modifications to `server.js` are sufficient
-
-**Test Files:**
-
-- No test files currently exist in the project
-- Test implementation is out of scope for this tutorial feature addition
-
-**Configuration Files:**
-
-- No new configuration files required
-- Existing `package.json` will be updated with new dependency
-
-**Documentation:**
-
-- No new documentation files required
-- Existing `README.md` will be updated with feature information
-
-
-## 0.3 Dependency Inventory
-
-This section documents all package dependencies required for the Express.js integration, including both new additions and existing project dependencies.
-
-### 0.3.1 Private and Public Packages
-
-**Current Project Dependencies:**
-
-| Package | Registry | Name | Version | Purpose |
-|---------|----------|------|---------|---------|
-| None | - | - | - | Project currently has zero external dependencies |
-
-**New Dependencies to Add:**
-
-| Package | Registry | Name | Version | Purpose |
-|---------|----------|------|---------|---------|
-| Public | npm | express | ^5.2.1 | Web framework for Node.js providing routing, middleware support, and HTTP utilities |
-
-**Dependency Details:**
-
-The `express` package is the only required dependency for this feature addition:
-
-- **Package Name**: `express`
-- **Current Latest Version**: 5.2.1 (verified from npm registry)
-- **License**: MIT
-- **Node.js Requirement**: ≥18.0.0 (project uses v20.20.0, compatible)
-- **Weekly Downloads**: ~17 million
-- **Repository**: https://github.com/expressjs/express
-
-**Transitive Dependencies:**
-
-Express.js 5.x brings the following key transitive dependencies (automatically installed):
-
-| Transitive Dependency | Purpose |
-|----------------------|---------|
-| `body-parser` | Request body parsing middleware |
-| `content-disposition` | Content-Disposition header parsing |
-| `content-type` | Content-Type header parsing |
-| `cookie` | Cookie parsing |
-| `debug` | Debugging utility |
-| `encodeurl` | URL encoding |
-| `finalhandler` | Final HTTP responder |
-| `fresh` | HTTP response freshness testing |
-| `merge-descriptors` | Object merging |
-| `methods` | HTTP methods |
-| `path-to-regexp` | Route path matching |
-| `qs` | Query string parsing |
-| `router` | Express router |
-| `send` | Static file serving |
-| `serve-static` | Static file middleware |
-| `utils-merge` | Object merging utility |
-
-### 0.3.2 Dependency Updates
-
-**Import Updates:**
-
-| File | Current Import | New Import | Line |
-|------|----------------|------------|------|
-| `server.js` | `const http = require('http');` | `const express = require('express');` | 1 |
-
-**Import Transformation Rules:**
-
-```javascript
-// Old (current implementation):
-const http = require('http');
-
-// New (after Express.js integration):
-const express = require('express');
-```
-
-**Package.json Updates:**
-
-The `package.json` file will be updated to include the new dependency:
-
-```json
-{
-  "dependencies": {
-    "express": "^5.2.1"
-  }
-}
-```
-
-**Installation Command:**
+#### Reproduction Steps
 
 ```bash
-npm install express@^5.2.1
-```
-
-**Lock File Updates:**
-
-The `package-lock.json` will be automatically regenerated by npm to include:
-- Express.js and all transitive dependencies
-- Integrity hashes for package verification
-- Dependency resolution tree
-
-**External Reference Updates:**
-
-| File | Section | Update Required |
-|------|---------|-----------------|
-| `package.json` | dependencies | Add `"express": "^5.2.1"` |
-| `package.json` | main | Consider updating from `"index.js"` to `"server.js"` |
-| `README.md` | Dependencies | Document Express.js requirement |
-
-
-## 0.4 Integration Analysis
-
-This section documents all existing code touchpoints that require modification to integrate Express.js and add the new endpoint.
-
-### 0.4.1 Existing Code Touchpoints
-
-**Direct Modifications Required:**
-
-| File | Location | Current Code | Modification Description |
-|------|----------|--------------|--------------------------|
-| `server.js` | Line 1 | `const http = require('http');` | Replace with Express.js import |
-| `server.js` | Lines 3-4 | Hostname/port constants | Retain but modify usage pattern |
-| `server.js` | Lines 6-10 | `http.createServer()` callback | Replace with Express app and route handlers |
-| `server.js` | Lines 12-14 | `server.listen()` | Replace with `app.listen()` |
-
-**Detailed Touchpoint Analysis:**
-
-**1. Module Import (Line 1)**
-```javascript
-// Current:
-const http = require('http');
-
-// After modification:
-const express = require('express');
-```
-
-**2. Configuration Constants (Lines 3-4)**
-```javascript
-// Current (RETAIN):
-const hostname = '127.0.0.1';
-const port = 3000;
-```
-
-**3. Server Creation (Line 6)**
-```javascript
-// Current:
-const server = http.createServer((req, res) => { ... });
-
-// After modification:
-const app = express();
-```
-
-**4. Request Handler (Lines 6-10)**
-```javascript
-// Current (single inline handler):
-const server = http.createServer((req, res) => {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain');
-  res.end('Hello, World!\n');
-});
-
-// After modification (route handlers):
-app.get('/', (req, res) => {
-  res.type('text/plain').send('Hello, World!\n');
-});
-
-app.get('/evening', (req, res) => {
-  res.type('text/plain').send('Good evening\n');
-});
-```
-
-**5. Server Start (Lines 12-14)**
-```javascript
-// Current:
-server.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
-});
-
-// After modification:
-app.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
-});
-```
-
-**Dependency Injections:**
-
-This tutorial project does not use dependency injection patterns. No dependency container or service registration is required.
-
-**Database/Schema Updates:**
-
-This feature addition does not involve any database operations. No migrations or schema changes are required.
-
-**API Endpoint Changes:**
-
-| Endpoint | Method | Current Status | After Implementation |
-|----------|--------|----------------|----------------------|
-| `/` | GET | Returns "Hello, World!" (implicit) | Returns "Hello, World!" (explicit route) |
-| `/evening` | GET | Does not exist | Returns "Good evening" |
-| `/*` (other paths) | ANY | Returns "Hello, World!" | Returns 404 Not Found |
-
-**Behavioral Changes:**
-
-| Aspect | Before (http module) | After (Express.js) |
-|--------|---------------------|-------------------|
-| Route matching | All paths return same response | Explicit path-based routing |
-| 404 Handling | No 404 (all paths respond) | Express default 404 for unmatched routes |
-| Response API | `res.end()`, `res.setHeader()` | `res.send()`, `res.type()` |
-| Middleware | Not available | Full middleware support available |
-
-
-## 0.5 Technical Implementation
-
-This section provides a detailed file-by-file execution plan for implementing the Express.js integration and new endpoint feature.
-
-### 0.5.1 File-by-File Execution Plan
-
-**CRITICAL: Every file listed below MUST be created or modified as specified.**
-
-**Group 1 - Dependency Configuration:**
-
-| Action | File | Purpose |
-|--------|------|---------|
-| MODIFY | `package.json` | Add Express.js dependency to project |
-| AUTO-UPDATE | `package-lock.json` | Lock file regenerated by npm install |
-
-**Group 2 - Core Server Implementation:**
-
-| Action | File | Purpose |
-|--------|------|---------|
-| MODIFY | `server.js` | Refactor to Express.js, add both endpoints |
-
-**Group 3 - Documentation:**
-
-| Action | File | Purpose |
-|--------|------|---------|
-| MODIFY | `README.md` | Document Express.js usage and available endpoints |
-
-### 0.5.2 Implementation Approach per File
-
-**1. package.json Modifications**
-
-Add the dependencies section with Express.js:
-
-```json
-{
-  "dependencies": {
-    "express": "^5.2.1"
-  }
-}
-```
-
-Optionally update the `main` field to reflect actual entry point:
-
-```json
-{
-  "main": "server.js"
-}
-```
-
-**2. server.js Complete Refactoring**
-
-The entire `server.js` file will be refactored from the Node.js built-in `http` module to Express.js:
-
-**Structure Overview:**
-- Import Express.js module
-- Create Express application instance
-- Define route handler for root path (`/`) returning "Hello, World!"
-- Define route handler for evening path (`/evening`) returning "Good evening"
-- Start server on configured hostname and port
-
-**Key Implementation Details:**
-
-| Component | Implementation Pattern |
-|-----------|----------------------|
-| App Creation | `const app = express();` |
-| Root Route | `app.get('/', handler)` |
-| Evening Route | `app.get('/evening', handler)` |
-| Response Type | `res.type('text/plain')` |
-| Response Body | `res.send('message')` |
-| Server Start | `app.listen(port, hostname, callback)` |
-
-**3. README.md Documentation Update**
-
-Add the following sections:
-- Dependencies section listing Express.js
-- Available endpoints documentation
-- Instructions for running the server
-- Example curl commands for testing endpoints
-
-### 0.5.3 Expected Server Behavior
-
-After implementation, the server will respond as follows:
-
-| Request | Response Status | Response Body | Content-Type |
-|---------|-----------------|---------------|--------------|
-| `GET /` | 200 OK | `Hello, World!` | text/plain |
-| `GET /evening` | 200 OK | `Good evening` | text/plain |
-| `GET /other` | 404 Not Found | Express default 404 | text/html |
-
-**Testing Commands:**
-
-```bash
-# Start the server
+# Start the original server
 
 node server.js
 
-#### Test root endpoint
+#### Test 1: Access non-existent route
 
-curl http://127.0.0.1:3000/
+curl http://127.0.0.1:3000/nonexistent
+# Result: Returns HTML error page (not plain text)
 
-#### Test evening endpoint
+#### Test 2: Terminate with Ctrl+C
 
-curl http://127.0.0.1:3000/evening
+#### Result: Abrupt termination with no cleanup messaging
+
 ```
 
-### 0.5.4 User Interface Design
-
-This feature addition does not involve any user interface components. The implementation is purely server-side API endpoints returning plain text responses.
-
-- No Figma URLs were provided
-- No frontend components are required
-- No HTML/CSS/JavaScript client code is needed
-
-The endpoints are designed for programmatic access or simple browser/curl testing as appropriate for a tutorial-level Node.js server project.
 
 
-## 0.6 Scope Boundaries
+## 0.2 Root Cause Identification
 
-This section establishes clear boundaries for the feature implementation, distinguishing between what is included in the scope and what is explicitly excluded.
+Based on research, THE root cause(s) are:
 
-### 0.6.1 Exhaustively In Scope
+#### Root Cause 1: Missing Server Reference Capture
 
-**Source Files:**
+- **Located in**: `server.js`, line 16
+- **Triggered by**: Calling `app.listen()` without storing the return value
+- **Evidence**: Original code `app.listen(port, hostname, () => {...})` discards the server object
+- **This is definitive because**: Without the server object reference, `server.close()` cannot be called for graceful shutdown
 
-| Pattern | Files Matched | Action |
-|---------|---------------|--------|
-| `server.js` | Main server implementation | MODIFY - Full refactoring to Express.js |
+#### Root Cause 2: No Error Handling Middleware
 
-**Configuration Files:**
+- **Located in**: `server.js` - absent after routes (lines 8-14)
+- **Triggered by**: Any thrown error or `next(err)` call in route handlers
+- **Evidence**: Express requires a 4-parameter middleware `(err, req, res, next)` to catch errors
+- **This is definitive because**: Express official documentation states error-handling middleware must have exactly 4 arguments
 
-| Pattern | Files Matched | Action |
-|---------|---------------|--------|
-| `package.json` | npm package manifest | MODIFY - Add express dependency |
-| `package-lock.json` | npm lock file | AUTO-UPDATE - Regenerated by npm |
+#### Root Cause 3: No 404 Handler
 
-**Documentation:**
+- **Located in**: `server.js` - absent after routes
+- **Triggered by**: Any request to undefined routes
+- **Evidence**: Testing `/nonexistent` returns Express default HTML 404 page
+- **This is definitive because**: Express uses catch-all middleware pattern for custom 404 responses
 
-| Pattern | Files Matched | Action |
-|---------|---------------|--------|
-| `README.md` | Project documentation | MODIFY - Add endpoint documentation |
+#### Root Cause 4: No Process Signal Handlers
 
-**Detailed In-Scope Item List:**
+- **Located in**: `server.js` - absent entirely
+- **Triggered by**: SIGTERM/SIGINT signals from process managers or Ctrl+C
+- **Evidence**: No `process.on('SIGTERM', ...)` or `process.on('SIGINT', ...)` registered
+- **This is definitive because**: Node.js documentation confirms these must be explicitly registered
 
-| Item | Description | Scope Type |
-|------|-------------|------------|
-| Express.js Installation | Add express@^5.2.1 via npm | Dependency |
-| Import Statement | Change from `http` to `express` | Code Modification |
-| App Initialization | Create Express application instance | Code Modification |
-| Root Endpoint | `GET /` returning "Hello, World!" | New Route |
-| Evening Endpoint | `GET /evening` returning "Good evening" | New Route |
-| Server Configuration | Maintain hostname 127.0.0.1, port 3000 | Configuration |
-| Server Startup | Use `app.listen()` pattern | Code Modification |
-| Console Logging | Maintain server startup message | Code Modification |
-| Documentation | Update README with endpoint info | Documentation |
+#### Root Cause 5: No Global Exception Handlers
 
-**Specific Code Locations:**
+- **Located in**: `server.js` - absent entirely
+- **Triggered by**: Uncaught synchronous exceptions or unhandled promise rejections
+- **Evidence**: No `process.on('uncaughtException', ...)` or `process.on('unhandledRejection', ...)` registered
+- **This is definitive because**: Without these handlers, uncaught errors crash the process without logging
 
-| File | Lines | In-Scope Change |
+
+
+## 0.3 Diagnostic Execution
+
+#### Code Examination Results
+
+**File analyzed**: `server.js`
+**Problematic code block**: Lines 1-18 (entire file)
+**Specific failure points**:
+- Line 16: `app.listen()` return value not captured
+- After Line 14: No 404 middleware
+- After Line 14: No error middleware
+- Global scope: No process signal handlers
+
+**Execution flow leading to issues**:
+1. Server starts → Express app created → Routes defined → Server starts listening
+2. Unknown request arrives → No matching route → Express default 404 HTML response
+3. Error thrown in route → No error middleware → Express default HTML error
+4. SIGTERM received → No handler → Abrupt termination without cleanup
+
+#### Repository Analysis Findings
+
+| Tool Used | Command Executed | Finding | File:Line |
+|-----------|-----------------|---------|-----------|
+| read_file | `cat -n server.js` | Only 18 lines, minimal implementation | server.js:1-18 |
+| read_file | `cat package.json` | Express 5.2.1 dependency confirmed | package.json |
+| bash | `curl http://127.0.0.1:3000/nonexistent` | Returns HTML 404 page | N/A |
+| bash | `node --version` | Node v20.20.0 (compatible with >=18) | N/A |
+
+#### Web Search Findings
+
+**Search queries executed**:
+- "Express.js 5 error handling middleware best practices"
+- "Node.js Express graceful shutdown SIGTERM signal handler"
+- "Node.js uncaughtException unhandledRejection process handling"
+- "Express.js app.listen server reference resource cleanup"
+
+**Web sources referenced**:
+- expressjs.com/en/guide/error-handling.html (official Express docs)
+- expressjs.com/en/advanced/healthcheck-graceful-shutdown.html (official Express docs)
+- nodejs.org/api/process.html (official Node.js docs)
+- dev.to, Medium, Better Stack (community best practices)
+
+**Key findings incorporated**:
+1. Express 5 automatically catches Promise rejections in async route handlers
+2. Error-handling middleware requires exactly 4 parameters `(err, req, res, next)`
+3. Graceful shutdown requires capturing server reference and calling `server.close()`
+4. SIGTERM handler is essential for container orchestration (Docker, Kubernetes)
+5. Shutdown timeout prevents hanging during graceful shutdown
+
+#### Fix Verification Analysis
+
+**Steps followed to reproduce bug**:
+1. Started original server with `node server.js`
+2. Tested 404 response: `curl http://127.0.0.1:3000/nonexistent` → HTML page
+3. Terminated with Ctrl+C → No cleanup messaging
+
+**Confirmation tests used to ensure bug was fixed**:
+1. All 19 Jest unit tests pass
+2. Integration test: 404 returns "Not Found" with HTTP 404
+3. Integration test: SIGTERM triggers graceful shutdown sequence
+4. Process exits with code 0 after cleanup
+
+**Boundary conditions and edge cases covered**:
+- Deeply nested non-existent routes (`/a/b/c/d/e`)
+- Unsupported HTTP methods on existing routes (POST `/`)
+- Multiple simultaneous shutdown signals (prevented with `isShuttingDown` flag)
+- Shutdown timeout (10 seconds) for hung connections
+
+**Verification confidence level**: 95%
+
+
+
+## 0.4 Bug Fix Specification
+
+#### The Definitive Fix
+
+**Files to modify**: `server.js`
+
+**Summary of changes**:
+The fix transforms `server.js` from 18 lines to 147 lines by adding:
+- 404 handler middleware
+- Error handling middleware
+- Server reference capture
+- Graceful shutdown function
+- SIGTERM/SIGINT signal handlers
+- uncaughtException/unhandledRejection handlers
+- Module exports for testing
+
+#### Change Instructions
+
+**1. Add shutdown tracking flag (after line 6)**
+```javascript
+// INSERT after const app = express();
+let isShuttingDown = false;
+```
+This prevents multiple simultaneous shutdown attempts if signals arrive in rapid succession.
+
+**2. Add 404 handler (after routes, before error handler)**
+```javascript
+// INSERT after existing routes
+app.use((req, res) => {
+  res.status(404).type('text/plain').send('Not Found\n');
+});
+```
+This catches all unmatched routes and returns a consistent plain text 404 response.
+
+**3. Add error handling middleware (after 404 handler)**
+```javascript
+// INSERT after 404 handler
+app.use((err, req, res, next) => {
+  console.error('Error occurred:', err.stack || err.message || err);
+  const statusCode = err.status || err.statusCode || 500;
+  const message = process.env.NODE_ENV === 'production' 
+    ? 'Internal Server Error' 
+    : err.message || 'Internal Server Error';
+  res.status(statusCode).type('text/plain').send(`${message}\n`);
+});
+```
+This catches all errors from routes and returns formatted error responses with appropriate status codes.
+
+**4. Capture server reference (modify line 16)**
+```javascript
+// MODIFY from: app.listen(port, hostname, () => {...});
+// MODIFY to:
+const server = app.listen(port, hostname, () => {
+  console.log(`Server running at http://${hostname}:${port}/`);
+});
+```
+This stores the server reference required for graceful shutdown.
+
+**5. Add graceful shutdown function**
+```javascript
+// INSERT after server.listen
+function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    console.log('Shutdown already in progress...');
+    return;
+  }
+  isShuttingDown = true;
+  console.log(`\n${signal} signal received: starting graceful shutdown`);
+  server.close((err) => {
+    if (err) {
+      console.error('Error during server close:', err);
+      process.exit(1);
+    }
+    console.log('HTTP server closed');
+    console.log('Cleanup complete, exiting process');
+    process.exit(0);
+  });
+  const SHUTDOWN_TIMEOUT = 10000;
+  setTimeout(() => {
+    console.error(`Forced shutdown after ${SHUTDOWN_TIMEOUT}ms timeout`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT);
+}
+```
+This provides coordinated shutdown with timeout protection.
+
+**6. Add signal handlers**
+```javascript
+// INSERT after gracefulShutdown function
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+```
+These handle process manager signals and Ctrl+C respectively.
+
+**7. Add exception handlers**
+```javascript
+// INSERT after signal handlers
+process.on('uncaughtException', (err, origin) => {
+  console.error('Uncaught Exception:', err);
+  console.error('Exception origin:', origin);
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+});
+```
+These provide last-resort error handling for unexpected failures.
+
+**8. Add module exports**
+```javascript
+// INSERT at end of file
+module.exports = { app, server };
+```
+This enables unit testing of the server.
+
+#### Fix Validation
+
+**Test command to verify fix**:
+```bash
+npm test
+```
+
+**Expected output after fix**:
+```
+Test Suites: 1 passed, 1 total
+Tests:       19 passed, 19 total
+```
+
+**Confirmation method**:
+- All 19 unit tests pass
+- Integration test shows correct 404 responses
+- Integration test confirms graceful shutdown sequence
+
+
+
+## 0.5 Scope Boundaries
+
+#### Changes Required (EXHAUSTIVE LIST)
+
+| File | Lines | Specific Change |
 |------|-------|-----------------|
-| `server.js` | Line 1 | Replace http import with express import |
-| `server.js` | Lines 3-4 | Retain configuration constants |
-| `server.js` | Lines 6-10 | Replace with Express app and routes |
-| `server.js` | Lines 12-14 | Replace with app.listen() |
-| `package.json` | New section | Add "dependencies" object |
-| `README.md` | New section | Add API endpoint documentation |
+| `server.js` | Line 8 | INSERT: `isShuttingDown` flag variable |
+| `server.js` | Lines 23-29 | INSERT: 404 handler middleware |
+| `server.js` | Lines 31-50 | INSERT: Error handling middleware |
+| `server.js` | Line 56 | MODIFY: Capture server reference with `const server = app.listen(...)` |
+| `server.js` | Lines 60-104 | INSERT: `gracefulShutdown()` function |
+| `server.js` | Lines 106-114 | INSERT: SIGTERM/SIGINT signal handlers |
+| `server.js` | Lines 116-128 | INSERT: uncaughtException handler |
+| `server.js` | Lines 130-141 | INSERT: unhandledRejection handler |
+| `server.js` | Line 147 | INSERT: Module exports |
+| `server.test.js` | New file | CREATE: 19 comprehensive unit tests |
+| `package.json` | `scripts.test` | MODIFY: Update test script to use Jest |
+| `package.json` | `devDependencies` | ADD: supertest, jest |
 
-### 0.6.2 Explicitly Out of Scope
+**No other files require modification.**
 
-**Unrelated Project Files:**
+#### Explicitly Excluded
 
-| File | Reason for Exclusion |
-|------|---------------------|
-| `server - Copy.js` | Duplicate file, not the main implementation |
-| `LoginTest.java` | Java test stub, unrelated to Node.js server |
-| `LoginTest - Copy.java` | Java test stub copy, unrelated |
-| `industry.csv` | Reference data, unrelated to server |
-| `industry - Copy.csv` | Reference data copy, unrelated |
-| `test.py.txt` | Empty Python placeholder, unrelated |
-| `test.py - Copy.txt` | Empty placeholder copy, unrelated |
-| `test.txt.txt` | Empty placeholder, unrelated |
-| `demo.jpg` | Image file, unrelated |
-| `demo - Copy.jpg` | Image file copy, unrelated |
-| `sample.doc` | Document file, unrelated |
-| `sample - Copy.doc` | Document file copy, unrelated |
-| `100Pages.pdf` | PDF file, unrelated |
-| `100Pages - Copy.pdf` | PDF file copy, unrelated |
+**Do not modify:**
+- `README.md` - Documentation updates are outside bug fix scope
+- `package-lock.json` - Will auto-update when dependencies are installed
+- Any other files not listed above
 
-**Excluded Features and Enhancements:**
+**Do not refactor:**
+- Existing route handlers (`/` and `/evening`) - Working correctly
+- Existing hostname/port configuration - Working correctly
+- Console.log statements - Appropriate for this application scale
 
-| Exclusion | Rationale |
-|-----------|-----------|
-| TypeScript conversion | Not requested, project uses JavaScript |
-| ES Modules migration | Not requested, project uses CommonJS |
-| Test suite implementation | No tests currently exist, not requested |
-| Middleware additions | Not required for basic routing |
-| Error handling middleware | Basic Express defaults sufficient |
-| Static file serving | Not requested |
-| Template engine integration | Not requested |
-| Database integration | Not requested |
-| Authentication/Authorization | Not requested |
-| Environment variable configuration | Not required for tutorial |
-| Docker containerization | Not requested |
-| CI/CD pipeline setup | Not requested |
-| Performance optimizations | Not required for tutorial |
-| Logging middleware | Not requested |
-| CORS configuration | Not requested |
-| Rate limiting | Not requested |
-| API versioning | Not required for two endpoints |
-| Request validation | Not required for simple GET endpoints |
-| Response compression | Not requested |
-| HTTPS/TLS configuration | Not requested |
-
-**Boundary Clarification:**
-
-This implementation focuses solely on:
-1. Adding Express.js as a dependency
-2. Migrating the existing "Hello, World!" endpoint to Express.js
-3. Adding a new "/evening" endpoint returning "Good evening"
-4. Updating documentation to reflect changes
-
-Any functionality beyond these items is explicitly out of scope for this feature addition.
+**Do not add:**
+- Input validation middleware - Not needed for current routes (no user input)
+- Rate limiting - Outside scope of error handling bug fix
+- Request logging middleware - Outside scope of error handling bug fix
+- Health check endpoint - Outside scope (though commonly paired with graceful shutdown)
+- HTTPS support - Outside scope of this bug fix
+- Environment variable configuration - Outside scope of this bug fix
 
 
-## 0.7 Rules for Feature Addition
 
-This section documents the specific rules, patterns, and requirements that must be followed during the implementation of the Express.js integration.
+## 0.6 Verification Protocol
 
-### 0.7.1 Feature-Specific Rules
+#### Bug Elimination Confirmation
 
-**Code Style and Conventions:**
+**Execute test suite**:
+```bash
+npm test
+```
 
-| Rule | Description | Rationale |
-|------|-------------|-----------|
-| CommonJS Modules | Use `require()` syntax, not ES Modules `import` | Maintain consistency with existing codebase |
-| Single File Structure | Keep all server code in `server.js` | Tutorial simplicity |
-| Constant Naming | Use `const` for variables that don't change | JavaScript best practice |
-| String Quotes | Use single quotes for strings | Match existing code style |
-| Semicolons | Include semicolons at statement ends | Match existing code style |
-| Template Literals | Use backticks for string interpolation | Match existing console.log pattern |
+**Verify output matches**:
+```
+PASS ./server.test.js
+  Server Routes
+    GET /
+      ✓ should return "Hello, World!" with status 200
+    GET /evening
+      ✓ should return "Good evening" with status 200
+  404 Error Handling
+    ✓ should return 404 for non-existent routes
+    ✓ should return 404 for non-existent POST routes
+    ✓ should return 404 for deeply nested non-existent routes
+    ✓ should return 404 for unsupported HTTP methods on existing routes
+  Content Type Handling
+    ✓ should return plain text content type for root
+    ✓ should return plain text content type for 404
+  Server Exports
+    ✓ should export app object
+    ✓ should export server object
+  Graceful Shutdown Setup
+    ✓ should have SIGTERM handler registered
+    ✓ should have SIGINT handler registered
+    ✓ should have uncaughtException handler registered
+    ✓ should have unhandledRejection handler registered
+  Error Handling Middleware Pattern
+    ✓ should catch synchronous errors and return 500
+    ✓ should catch async errors and return 500
+    ✓ should respect custom status codes on errors
+    ✓ should allow normal routes to work
+    ✓ should return plain text content type for errors
 
-**Response Format Rules:**
+Test Suites: 1 passed, 1 total
+Tests:       19 passed, 19 total
+```
 
-| Rule | Implementation |
-|------|----------------|
-| Content-Type | Set to `text/plain` for all endpoints |
-| Response Termination | Include newline character (`\n`) at end of response body |
-| Exact Response Text | "Hello, World!" for root, "Good evening" for /evening |
+**Confirm error no longer appears**:
+```bash
+# Before fix: HTML error page
 
-**Routing Conventions:**
+#### After fix: Plain text response
 
-| Rule | Description |
-|------|-------------|
-| HTTP Method | Use GET method for both endpoints |
-| Path Format | Use lowercase paths without trailing slashes |
-| Root Path | Use `/` for Hello World endpoint |
-| Evening Path | Use `/evening` for Good evening endpoint |
+curl -s http://127.0.0.1:3000/nonexistent
+#### Expected: "Not Found"
 
-**Server Configuration Rules:**
+```
 
-| Configuration | Value | Requirement |
-|---------------|-------|-------------|
-| Hostname | `127.0.0.1` | MUST match existing configuration |
-| Port | `3000` | MUST match existing configuration |
-| Startup Message | `Server running at http://${hostname}:${port}/` | MUST preserve existing log format |
+**Validate graceful shutdown**:
+```bash
+node server.js &
+SERVER_PID=$!
+sleep 2
+kill -SIGTERM $SERVER_PID
+# Expected output:
 
-### 0.7.2 Integration Requirements
+#### SIGTERM signal received: starting graceful shutdown
 
-**Express.js Integration:**
+#### HTTP server closed
 
-| Requirement | Details |
-|-------------|---------|
-| Version | Use Express.js ^5.2.1 (latest stable) |
-| Import | Single import statement for express |
-| App Creation | Create app instance immediately after import |
-| Route Registration | Register routes before calling listen() |
+#### Cleanup complete, exiting process
 
-**Backward Compatibility:**
+```
 
-| Aspect | Requirement |
-|--------|-------------|
-| Root Endpoint Response | MUST return exactly "Hello, World!\n" |
-| Port Binding | MUST bind to same port (3000) |
-| Host Binding | MUST bind to same host (127.0.0.1) |
-| Startup Behavior | MUST log same startup message |
+#### Regression Check
 
-### 0.7.3 Performance Considerations
+**Run existing test suite**:
+```bash
+npm test
+```
 
-For this tutorial-level project, no specific performance requirements apply. The implementation should prioritize:
+**Verify unchanged behavior**:
+- GET `/` still returns "Hello, World!"
+- GET `/evening` still returns "Good evening"
+- Server still binds to 127.0.0.1:3000
 
-| Priority | Description |
-|----------|-------------|
-| Clarity | Code should be easy to understand for beginners |
-| Simplicity | Avoid unnecessary complexity or abstractions |
-| Correctness | Endpoints must return expected responses |
+**Confirm performance characteristics**:
+- Server startup time: < 1 second (unchanged)
+- Route response time: < 10ms (unchanged)
+- Graceful shutdown time: < 10 seconds (new timeout)
 
-### 0.7.4 Security Requirements
 
-Basic security considerations for this tutorial project:
 
-| Requirement | Status |
-|-------------|--------|
-| Localhost Binding | Server binds to 127.0.0.1 (not exposed externally) |
-| Input Validation | Not required (no user input accepted) |
-| Rate Limiting | Not required (tutorial scope) |
-| HTTPS | Not required (localhost development) |
+## 0.7 Execution Requirements
 
-### 0.7.5 Testing Validation Criteria
+#### Research Completeness Checklist
 
-The implementation will be validated against these criteria:
+✓ Repository structure fully mapped
+- `server.js` - Main application file (analyzed)
+- `package.json` - Dependencies and scripts (analyzed)
+- `package-lock.json` - Lock file (generated)
+- `README.md` - Documentation (read)
 
-| Test Case | Expected Behavior |
-|-----------|-------------------|
-| `GET http://127.0.0.1:3000/` | Returns "Hello, World!\n" with status 200 |
-| `GET http://127.0.0.1:3000/evening` | Returns "Good evening\n" with status 200 |
-| Server startup | Logs "Server running at http://127.0.0.1:3000/" |
-| Express dependency | Listed in package.json dependencies |
+✓ All related files examined with retrieval tools
+- Used `read_file` on server.js, package.json, README.md
+- Used `get_source_folder_contents` on repository root
+- Used bash commands for file inspection and testing
+
+✓ Bash analysis completed for patterns/dependencies
+- Verified Node.js version: v20.20.0
+- Verified Express version: 5.2.1
+- Tested endpoints with curl
+- Tested graceful shutdown with kill signals
+
+✓ Root cause definitively identified with evidence
+- 5 specific root causes documented
+- Each with file location, trigger condition, and evidence
+- All confirmed through testing
+
+✓ Single solution determined and validated
+- Comprehensive fix implemented
+- 19 unit tests pass
+- Integration tests successful
+
+#### Fix Implementation Rules
+
+**Make the exact specified change only:**
+- All changes are documented in section 0.4
+- No additional features beyond error handling scope
+
+**Zero modifications outside the bug fix:**
+- No changes to existing route logic
+- No changes to hostname/port configuration
+- No unnecessary code reorganization
+
+**No interpretation or improvement of working code:**
+- Existing routes preserved exactly
+- Only additions to fill identified gaps
+
+**Preserve all whitespace and formatting except where changed:**
+- New code follows existing indentation (2 spaces)
+- Comments use same style as would be typical for the codebase
+- Line endings consistent
+
+#### Dependencies Added
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| jest | ^29.x | Unit testing framework |
+| supertest | ^7.x | HTTP assertion library for testing Express apps |
+
+These are development dependencies only and do not affect production runtime.
+
 
 
 ## 0.8 References
 
-This section documents all sources, files, and resources used to derive the conclusions and recommendations in this Agent Action Plan.
+#### Files and Folders Searched
 
-### 0.8.1 Repository Files Analyzed
+| Path | Type | Purpose |
+|------|------|---------|
+| `/` (repository root) | Folder | Initial repository structure discovery |
+| `server.js` | File | Main application - primary analysis target |
+| `package.json` | File | Dependencies and configuration |
+| `package-lock.json` | File | Dependency lock verification |
+| `README.md` | File | Project documentation |
 
-**Source Code Files:**
+#### Web Sources Referenced
 
-| File Path | Purpose | Key Information Extracted |
-|-----------|---------|---------------------------|
-| `server.js` | Main HTTP server | Current implementation using `http` module, hostname/port configuration, response format |
-| `server - Copy.js` | Duplicate server | Identified as out-of-scope duplicate |
+| Source | Topic | Key Contribution |
+|--------|-------|------------------|
+| expressjs.com/en/guide/error-handling.html | Express Error Handling | Error middleware pattern with 4 parameters |
+| expressjs.com/en/advanced/healthcheck-graceful-shutdown.html | Graceful Shutdown | `server.close()` pattern for SIGTERM handling |
+| nodejs.org/api/process.html | Process Events | `uncaughtException` and `unhandledRejection` event handling |
+| dev.to (multiple articles) | Best Practices | Community patterns for Node.js graceful shutdown |
+| Medium (multiple articles) | Best Practices | Global error handler implementation patterns |
+| Better Stack Community | Error Handling | Express 5 automatic Promise rejection handling |
+| GeeksforGeeks | Express Methods | `app.listen()` behavior and return values |
 
-**Configuration Files:**
-
-| File Path | Purpose | Key Information Extracted |
-|-----------|---------|---------------------------|
-| `package.json` | npm package manifest | Package name, version, main entry, no dependencies |
-| `package-lock.json` | npm lock file | lockfileVersion 3, no external dependencies |
-
-**Documentation Files:**
-
-| File Path | Purpose | Key Information Extracted |
-|-----------|---------|---------------------------|
-| `README.md` | Project documentation | Project name, purpose as test fixture |
-
-**Other Repository Files (Identified but Out of Scope):**
-
-| File Path | Type | Relevance |
-|-----------|------|-----------|
-| `LoginTest.java` | Java source | Not relevant to Node.js server |
-| `LoginTest - Copy.java` | Java source copy | Not relevant |
-| `industry.csv` | Reference data | Not relevant |
-| `industry - Copy.csv` | Reference data copy | Not relevant |
-| `test.py.txt` | Empty placeholder | Not relevant |
-| `test.py - Copy.txt` | Empty placeholder copy | Not relevant |
-| `test.txt.txt` | Empty placeholder | Not relevant |
-| `demo.jpg` | Image file | Not relevant |
-| `demo - Copy.jpg` | Image file copy | Not relevant |
-| `sample.doc` | Document file | Not relevant |
-| `sample - Copy.doc` | Document file copy | Not relevant |
-| `100Pages.pdf` | PDF file | Not relevant |
-| `100Pages - Copy.pdf` | PDF file copy | Not relevant |
-
-### 0.8.2 Technical Specification Sections Referenced
-
-| Section | Content Retrieved |
-|---------|-------------------|
-| 3.2 PROGRAMMING LANGUAGES | Node.js v20.x+ target, CommonJS module system |
-| 3.3 FRAMEWORKS & LIBRARIES | Current no-framework approach, Express.js previously excluded |
-
-### 0.8.3 External Research Sources
-
-| Source | Information Retrieved |
-|--------|----------------------|
-| npm Registry (express) | Latest version: 5.2.1 |
-| Express.js Official Blog | Express 5.1.0 LTS timeline, v5 now default on npm |
-| Express.js GitHub Releases | Node.js 18+ requirement, v5 release details |
-| endoflife.date/express | Express LTS support schedule |
-| Node.js Documentation | Built-in `http` module behavior |
-
-### 0.8.4 User-Provided Attachments
+#### Attachments Provided
 
 No attachments were provided for this project.
 
-| Attachment Type | Count | Notes |
-|-----------------|-------|-------|
-| Files | 0 | No files uploaded by user |
-| Figma URLs | 0 | No Figma designs provided |
-| External URLs | 0 | No external URLs referenced |
+#### Figma Screens Provided
 
-### 0.8.5 Environment Validation
+No Figma screens were provided for this project.
 
-| Component | Version | Verification Method |
-|-----------|---------|---------------------|
-| Node.js | v20.20.0 | `node --version` |
-| npm | v11.1.0 | `npm --version` |
-| Server Functionality | Working | `curl http://127.0.0.1:3000/` returns "Hello, World!" |
+#### Commands Executed for Analysis
 
-### 0.8.6 Search History Summary
+```bash
+# Repository structure discovery
 
-| Search # | Tool | Target | Purpose |
-|----------|------|--------|---------|
-| 1 | bash | `.blitzyignore` files | Identify excluded paths (none found) |
-| 2 | get_source_folder_contents | Root folder | Repository structure analysis |
-| 3 | read_file | `server.js` | Current implementation details |
-| 4 | read_file | `package.json` | Dependency and configuration analysis |
-| 5 | read_file | `package-lock.json` | Lock file verification |
-| 6 | read_file | `README.md` | Documentation review |
-| 7 | get_tech_spec_section | 3.2 PROGRAMMING LANGUAGES | Node.js version requirements |
-| 8 | get_tech_spec_section | 3.3 FRAMEWORKS & LIBRARIES | Framework selection context |
-| 9 | web_search | Express.js latest version | Current npm version verification |
-| 10 | bash | npm install | Environment setup verification |
-| 11 | bash | node server.js + curl | Server functionality test |
+find /workspace -name ".blitzyignore" 2>/dev/null
+ls -la
+
+#### File content analysis
+
+cat -n server.js
+cat package.json
+cat README.md
+head -100 package-lock.json | grep -E '"node"|"engines"' -A 2
+
+#### Environment verification
+
+node --version && npm --version
+
+#### Dependency installation
+
+npm install
+
+#### Server testing
+
+node server.js &
+curl -s http://127.0.0.1:3000/
+curl -s http://127.0.0.1:3000/evening
+curl -s http://127.0.0.1:3000/nonexistent
+kill -SIGTERM $SERVER_PID
+
+#### Test framework installation
+
+npm install --save-dev supertest jest
+
+#### Test execution
+
+npm test
+```
+
+#### Test Files Created
+
+| File | Lines of Code | Test Count | Coverage |
+|------|--------------|------------|----------|
+| `server.test.js` | ~170 | 19 | Routes, 404, Error Handling, Signal Handlers, Exports |
+
 
 
