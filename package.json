@@ -2,10 +2,14 @@
     "name": "hello_world",
     "version": "1.0.0",
     "description": "Hello world in Node.js",
-    "main": "index.js",
+    "main": "server.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "start": "node server.js",
+        "test": "node -e \"const http = require('http'); const tests = [{path:'/',expected:'Hello, World!'},{path:'/evening',expected:'Good evening'}]; let passed=0,failed=0; const runTest = (i) => { if(i >= tests.length) { console.log('Tests: ' + passed + '/' + tests.length + ' passed'); process.exit(failed > 0 ? 1 : 0); return; } const t = tests[i]; http.get('http://127.0.0.1:3000' + t.path, (res) => { let data = ''; res.on('data', c => data += c); res.on('end', () => { const actual = data.trim(); if(actual === t.expected) { console.log('PASS: GET ' + t.path + ' -> ' + actual); passed++; } else { console.log('FAIL: GET ' + t.path + ' -> Expected: ' + t.expected + ', Got: ' + actual); failed++; } runTest(i+1); }); }).on('error', (e) => { console.log('FAIL: GET ' + t.path + ' -> ' + e.message); failed++; runTest(i+1); }); }; runTest(0);\""
     },
     "author": "hxu",
-    "license": "MIT"
+    "license": "MIT",
+    "dependencies": {
+        "express": "^5.2.1"
+    }
 }
