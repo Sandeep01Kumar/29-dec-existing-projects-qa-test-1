@@ -49,13 +49,14 @@ Every HTTP response includes 13 protective security headers set by [Helmet](http
 - **X-Download-Options** — prevents Internet Explorer from executing downloaded files
 - **X-Frame-Options** — prevents clickjacking by restricting framing
 - **X-Permitted-Cross-Domain-Policies** — controls cross-domain policy files
+- **X-XSS-Protection** — disabled (`0`) to prevent legacy browser XSS filter from introducing vulnerabilities
 - **X-Powered-By** — removed to prevent server technology disclosure
 
 ### Rate Limiting
 
 All endpoints are protected by IP-based rate limiting:
 
-- **Window:** 15-minute sliding window
+- **Window:** 15-minute fixed window
 - **Limit:** 100 requests per IP per window
 - **Headers:** Modern `draft-8` standard `RateLimit` headers are included in every response
 - **Exceeded:** Clients that exceed the limit receive a `429 Too Many Requests` response
@@ -66,7 +67,7 @@ Query parameters on all routes are validated and sanitized using [express-valida
 
 - Parameters are trimmed and escaped to prevent injection attacks (XSS, SQL injection)
 - Malicious or oversized input returns a `400 Bad Request` response with a validation error message
-- Only the `name` query parameter is accepted, with a maximum length of 500 characters
+- The `name` query parameter is validated and sanitized, with a maximum length of 500 characters
 
 ### CORS Policy
 

@@ -318,7 +318,7 @@ describe('Security Headers', () => {
 // =============================================================================
 
 describe('CORS Policy', () => {
-  it('should include CORS headers in responses', async () => {
+  it('should allow requests without Origin header', async () => {
     // A request without an Origin header should complete successfully
     const response = await request(app).get('/');
 
