@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# TLS Certificates (NEVER commit private keys)
+certs/*.pem
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Coverage reports
+coverage/
