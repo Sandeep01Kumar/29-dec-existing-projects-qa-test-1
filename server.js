@@ -45,34 +45,39 @@ app.use(cors(corsOptions));  // 2. CORS policy enforcement
 app.use(limiter);            // 3. Rate limiting
 
 // =============================================================================
+// Input Validation Middleware (shared across routes)
+// =============================================================================
+
+// Reusable validation chain — validates and sanitizes query parameters
+const validateQuery = [
+  query('name')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Name exceeds maximum length')
+    .trim()
+    .escape(),
+];
+
+// Reusable validation error handler — returns 400 for invalid inputs
+function handleValidationErrors(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).type('text/plain').send('Validation Error\n');
+  }
+  next();
+}
+
+// =============================================================================
 // Routes
 // =============================================================================
 
-app.get('/',
-  [
-    query('name').optional().trim().escape(),
-  ],
-  (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).type('text/plain').send('Validation Error\n');
-    }
-    res.type('text/plain').send('Hello, World!\n');
-  }
-);
+app.get('/', validateQuery, handleValidationErrors, (req, res) => {
+  res.type('text/plain').send('Hello, World!\n');
+});
 
-app.get('/evening',
-  [
-    query('name').optional().trim().escape(),
-  ],
-  (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).type('text/plain').send('Validation Error\n');
-    }
-    res.type('text/plain').send('Good evening\n');
-  }
-);
+app.get('/evening', validateQuery, handleValidationErrors, (req, res) => {
+  res.type('text/plain').send('Good evening\n');
+});
 
 // =============================================================================
 // 404 Handler - Catches all unmatched routes
@@ -119,14 +124,19 @@ const certPath = './certs/cert.pem';
 const keyPath = './certs/key.pem';
 
 if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-  const httpsOptions = {
-    key: fs.readFileSync(keyPath),
-    cert: fs.readFileSync(certPath)
-  };
-  httpsServer = https.createServer(httpsOptions, app);
-  httpsServer.listen(httpsPort, hostname, () => {
-    console.log(`HTTPS server running at https://${hostname}:${httpsPort}/`);
-  });
+  try {
+    const httpsOptions = {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath)
+    };
+    httpsServer = https.createServer(httpsOptions, app);
+    httpsServer.listen(httpsPort, hostname, () => {
+      console.log(`HTTPS server running at https://${hostname}:${httpsPort}/`);
+    });
+  } catch (err) {
+    console.error('Failed to start HTTPS server:', err.message);
+    console.log('Continuing with HTTP only');
+  }
 }
 
 // =============================================================================
