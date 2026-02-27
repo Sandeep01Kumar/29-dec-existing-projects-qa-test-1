@@ -10,7 +10,7 @@
  */
 
 const request = require('supertest');
-const { app, server } = require('./server');
+const { app, server, httpsServer } = require('./server');
 
 // Store original process event listeners count for cleanup verification
 const originalListenerCounts = {
@@ -24,12 +24,14 @@ const originalListenerCounts = {
 // Test Suite Setup and Teardown
 // =============================================================================
 
-afterAll((done) => {
-  // Close the server after all tests complete
+afterAll(async () => {
+  // Close the HTTPS server if it was started (conditional on certificate presence)
+  if (httpsServer && httpsServer.listening) {
+    await new Promise((resolve) => httpsServer.close(resolve));
+  }
+  // Close the HTTP server after all tests complete
   if (server && server.listening) {
-    server.close(done);
-  } else {
-    done();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 
@@ -293,7 +295,7 @@ describe('Security Headers', () => {
     const response = await request(app).get('/');
 
     // Helmet sets X-Frame-Options to SAMEORIGIN by default
-    expect(response.headers['x-frame-options']).toBeDefined();
+    expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
   });
 
   it('should remove X-Powered-By header', async () => {
@@ -332,8 +334,8 @@ describe('CORS Policy', () => {
       .set('Origin', 'http://127.0.0.1:3000')
       .set('Access-Control-Request-Method', 'GET');
 
-    // CORS middleware should respond with appropriate headers
-    expect(response.headers['access-control-allow-origin']).toBeDefined();
+    // CORS middleware should respond with the configured allowed origin
+    expect(response.headers['access-control-allow-origin']).toBe('http://127.0.0.1:3000');
   });
 });
 
@@ -371,8 +373,27 @@ describe('Input Validation', () => {
 // =============================================================================
 
 describe('Rate Limiting', () => {
+  // Create an isolated Express app with its own rate limiter to ensure test
+  // independence. Using the shared `app` would exhaust its in-memory rate limit
+  // counter, causing all subsequent tests to receive 429 responses when Jest
+  // randomizes execution order (see Jest --randomize flag).
+  const express = require('express');
+  const { rateLimit } = require('express-rate-limit');
+
+  const rateLimitApp = express();
+  const testLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 100, // 100 requests per window per IP
+    standardHeaders: 'draft-8', // Modern RateLimit headers
+    legacyHeaders: false // Disable X-RateLimit-* headers
+  });
+  rateLimitApp.use(testLimiter);
+  rateLimitApp.get('/', (req, res) => {
+    res.type('text/plain').send('Hello, World!\n');
+  });
+
   it('should include rate limit headers in responses', async () => {
-    const response = await request(app).get('/');
+    const response = await request(rateLimitApp).get('/');
 
     // draft-8 standard headers from express-rate-limit (standardHeaders: 'draft-8')
     expect(response.headers['ratelimit-policy']).toBeDefined();
@@ -380,11 +401,11 @@ describe('Rate Limiting', () => {
 
   it('should return 429 when rate limit is exceeded', async () => {
     // Send requests in parallel to exceed the 100-request-per-window rate limit.
-    // Previous tests have already consumed some of the limit, so 110 requests
-    // should be more than enough to trigger a 429 Too Many Requests response.
+    // Using the isolated rateLimitApp ensures the shared app's rate limiter
+    // is not polluted, preserving test independence across all describe blocks.
     const promises = [];
     for (let i = 0; i < 110; i++) {
-      promises.push(request(app).get('/'));
+      promises.push(request(rateLimitApp).get('/'));
     }
 
     const responses = await Promise.all(promises);

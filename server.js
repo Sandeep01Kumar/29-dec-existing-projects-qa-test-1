@@ -218,4 +218,4 @@ process.on('unhandledRejection', (reason, promise) => {
 // Module Exports - Enable unit testing
 // =============================================================================
 
-module.exports = { app, server };
+module.exports = { app, server, httpsServer };
