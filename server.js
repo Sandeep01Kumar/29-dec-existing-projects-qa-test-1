@@ -54,6 +54,13 @@ const validateQuery = [
     .optional()
     .isLength({ max: 500 })
     .withMessage('Name exceeds maximum length')
+    .custom((value) => {
+      // Reject inputs containing HTML tags to prevent XSS injection (OWASP A03:2021)
+      if (/<[^>]*>/.test(value)) {
+        throw new Error('Input contains potentially dangerous content');
+      }
+      return true;
+    })
     .trim()
     .escape(),
 ];
