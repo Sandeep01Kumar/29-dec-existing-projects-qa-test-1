@@ -1,7 +1,14 @@
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const { rateLimit } = require('express-rate-limit');
+const { query, validationResult } = require('express-validator');
+const https = require('https');
+const fs = require('fs');
 
 const hostname = '127.0.0.1';
 const port = 3000;
+const httpsPort = 3443;
 
 const app = express();
 
@@ -9,16 +16,63 @@ const app = express();
 let isShuttingDown = false;
 
 // =============================================================================
+// Security Configuration
+// =============================================================================
+
+// CORS policy — restrictive origin allowlist with limited HTTP methods
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || 'http://127.0.0.1:3000',
+  methods: ['GET', 'HEAD', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+  optionsSuccessStatus: 204
+};
+
+// Rate limiter — 100 requests per 15-minute window per IP
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // 100 requests per window per IP
+  standardHeaders: 'draft-8', // Modern RateLimit headers
+  legacyHeaders: false // Disable X-RateLimit-* headers
+});
+
+// =============================================================================
+// Security Middleware (applied BEFORE routes in strict order)
+// =============================================================================
+
+app.use(helmet());          // 1. Security headers (MUST be first middleware)
+app.use(cors(corsOptions));  // 2. CORS policy enforcement
+app.use(limiter);            // 3. Rate limiting
+
+// =============================================================================
 // Routes
 // =============================================================================
 
-app.get('/', (req, res) => {
-  res.type('text/plain').send('Hello, World!\n');
-});
+app.get('/',
+  [
+    query('name').optional().trim().escape(),
+  ],
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).type('text/plain').send('Validation Error\n');
+    }
+    res.type('text/plain').send('Hello, World!\n');
+  }
+);
 
-app.get('/evening', (req, res) => {
-  res.type('text/plain').send('Good evening\n');
-});
+app.get('/evening',
+  [
+    query('name').optional().trim().escape(),
+  ],
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).type('text/plain').send('Validation Error\n');
+    }
+    res.type('text/plain').send('Good evening\n');
+  }
+);
 
 // =============================================================================
 // 404 Handler - Catches all unmatched routes
@@ -57,6 +111,25 @@ const server = app.listen(port, hostname, () => {
 });
 
 // =============================================================================
+// HTTPS Server (conditional — starts only if certificates exist)
+// =============================================================================
+
+let httpsServer = null;
+const certPath = './certs/cert.pem';
+const keyPath = './certs/key.pem';
+
+if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+  const httpsOptions = {
+    key: fs.readFileSync(keyPath),
+    cert: fs.readFileSync(certPath)
+  };
+  httpsServer = https.createServer(httpsOptions, app);
+  httpsServer.listen(httpsPort, hostname, () => {
+    console.log(`HTTPS server running at https://${hostname}:${httpsPort}/`);
+  });
+}
+
+// =============================================================================
 // Graceful Shutdown Function
 // Handles clean server termination with timeout protection
 // =============================================================================
@@ -70,6 +143,11 @@ function gracefulShutdown(signal) {
 
   isShuttingDown = true;
   console.log(`\n${signal} signal received: starting graceful shutdown`);
+
+  // Also close HTTPS server if running
+  if (httpsServer) {
+    httpsServer.close();
+  }
 
   // Stop accepting new connections and wait for existing ones to complete
   server.close((err) => {
