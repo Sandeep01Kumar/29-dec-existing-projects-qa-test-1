@@ -1,7 +1,14 @@
 const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const { rateLimit } = require('express-rate-limit');
+const { query, validationResult } = require('express-validator');
+const https = require('https');
+const fs = require('fs');
 
 const hostname = '127.0.0.1';
 const port = 3000;
+const httpsPort = 3443;
 
 const app = express();
 
@@ -9,14 +16,73 @@ const app = express();
 let isShuttingDown = false;
 
 // =============================================================================
+// Security Configuration
+// =============================================================================
+
+// CORS policy — restrictive origin allowlist with limited HTTP methods
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || 'http://127.0.0.1:3000',
+  methods: ['GET', 'HEAD', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+  optionsSuccessStatus: 204
+};
+
+// Rate limiter — 100 requests per 15-minute window per IP
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // 100 requests per window per IP
+  standardHeaders: 'draft-8', // Modern RateLimit headers
+  legacyHeaders: false // Disable X-RateLimit-* headers
+});
+
+// =============================================================================
+// Security Middleware (applied BEFORE routes in strict order)
+// =============================================================================
+
+app.use(helmet());          // 1. Security headers (MUST be first middleware)
+app.use(cors(corsOptions));  // 2. CORS policy enforcement
+app.use(limiter);            // 3. Rate limiting
+
+// =============================================================================
+// Input Validation Middleware (shared across routes)
+// =============================================================================
+
+// Reusable validation chain — validates and sanitizes query parameters
+const validateQuery = [
+  query('name')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Name exceeds maximum length')
+    .custom((value) => {
+      // Reject inputs containing HTML tags to prevent XSS injection (OWASP A03:2021)
+      if (/<[^>]*>/.test(value)) {
+        throw new Error('Input contains potentially dangerous content');
+      }
+      return true;
+    })
+    .trim()
+    .escape(),
+];
+
+// Reusable validation error handler — returns 400 for invalid inputs
+function handleValidationErrors(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).type('text/plain').send('Validation Error\n');
+  }
+  next();
+}
+
+// =============================================================================
 // Routes
 // =============================================================================
 
-app.get('/', (req, res) => {
+app.get('/', validateQuery, handleValidationErrors, (req, res) => {
   res.type('text/plain').send('Hello, World!\n');
 });
 
-app.get('/evening', (req, res) => {
+app.get('/evening', validateQuery, handleValidationErrors, (req, res) => {
   res.type('text/plain').send('Good evening\n');
 });
 
@@ -57,6 +123,30 @@ const server = app.listen(port, hostname, () => {
 });
 
 // =============================================================================
+// HTTPS Server (conditional — starts only if certificates exist)
+// =============================================================================
+
+let httpsServer = null;
+const certPath = './certs/cert.pem';
+const keyPath = './certs/key.pem';
+
+if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+  try {
+    const httpsOptions = {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath)
+    };
+    httpsServer = https.createServer(httpsOptions, app);
+    httpsServer.listen(httpsPort, hostname, () => {
+      console.log(`HTTPS server running at https://${hostname}:${httpsPort}/`);
+    });
+  } catch (err) {
+    console.error('Failed to start HTTPS server:', err.message);
+    console.log('Continuing with HTTP only');
+  }
+}
+
+// =============================================================================
 // Graceful Shutdown Function
 // Handles clean server termination with timeout protection
 // =============================================================================
@@ -70,6 +160,11 @@ function gracefulShutdown(signal) {
 
   isShuttingDown = true;
   console.log(`\n${signal} signal received: starting graceful shutdown`);
+
+  // Also close HTTPS server if running
+  if (httpsServer) {
+    httpsServer.close();
+  }
 
   // Stop accepting new connections and wait for existing ones to complete
   server.close((err) => {
@@ -123,4 +218,4 @@ process.on('unhandledRejection', (reason, promise) => {
 // Module Exports - Enable unit testing
 // =============================================================================
 
-module.exports = { app, server };
+module.exports = { app, server, httpsServer };

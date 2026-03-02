@@ -10,7 +10,7 @@
  */
 
 const request = require('supertest');
-const { app, server } = require('./server');
+const { app, server, httpsServer } = require('./server');
 
 // Store original process event listeners count for cleanup verification
 const originalListenerCounts = {
@@ -24,12 +24,14 @@ const originalListenerCounts = {
 // Test Suite Setup and Teardown
 // =============================================================================
 
-afterAll((done) => {
-  // Close the server after all tests complete
+afterAll(async () => {
+  // Close the HTTPS server if it was started (conditional on certificate presence)
+  if (httpsServer && httpsServer.listening) {
+    await new Promise((resolve) => httpsServer.close(resolve));
+  }
+  // Close the HTTP server after all tests complete
   if (server && server.listening) {
-    server.close(done);
-  } else {
-    done();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 
@@ -268,4 +270,147 @@ describe('Error Handling Middleware Pattern', () => {
     
     expect(response.headers['content-type']).toMatch(/text\/plain/);
   });
+});
+
+// =============================================================================
+// Security Headers Tests
+// Verify that helmet middleware sets protective HTTP response headers on every
+// response, including error responses (OWASP A05:2021 — Security Misconfiguration)
+// =============================================================================
+
+describe('Security Headers', () => {
+  it('should set Content-Security-Policy header', async () => {
+    const response = await request(app).get('/');
+
+    expect(response.headers['content-security-policy']).toBeDefined();
+  });
+
+  it('should set X-Content-Type-Options header', async () => {
+    const response = await request(app).get('/');
+
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('should set X-Frame-Options header', async () => {
+    const response = await request(app).get('/');
+
+    // Helmet sets X-Frame-Options to SAMEORIGIN by default
+    expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+  });
+
+  it('should remove X-Powered-By header', async () => {
+    const response = await request(app).get('/');
+
+    // Helmet removes X-Powered-By to prevent server technology fingerprinting
+    expect(response.headers['x-powered-by']).toBeUndefined();
+  });
+
+  it('should set security headers on error responses too', async () => {
+    const response = await request(app).get('/nonexistent');
+
+    // Security headers must be present even on 404 error responses
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+  });
+});
+
+// =============================================================================
+// CORS Policy Tests
+// Verify that the cors middleware enforces cross-origin access control policies
+// with a restrictive origin allowlist (OWASP A05:2021)
+// =============================================================================
+
+describe('CORS Policy', () => {
+  it('should allow requests without Origin header', async () => {
+    // A request without an Origin header should complete successfully
+    const response = await request(app).get('/');
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should handle preflight OPTIONS requests', async () => {
+    // Preflight request from the configured allowed origin
+    const response = await request(app)
+      .options('/')
+      .set('Origin', 'http://127.0.0.1:3000')
+      .set('Access-Control-Request-Method', 'GET');
+
+    // CORS middleware should respond with the configured allowed origin
+    expect(response.headers['access-control-allow-origin']).toBe('http://127.0.0.1:3000');
+  });
+});
+
+// =============================================================================
+// Input Validation Tests
+// Verify that express-validator sanitizes and validates all incoming request
+// data to prevent injection attacks (OWASP A03:2021 — Injection)
+// =============================================================================
+
+describe('Input Validation', () => {
+  it('should reject requests with malicious query parameters', async () => {
+    // XSS payload in query parameter should be rejected with 400
+    const response = await request(app)
+      .get('/?name=<script>alert("xss")</script>');
+
+    expect(response.status).toBe(400);
+    expect(response.text).toContain('Validation Error');
+  });
+
+  it('should allow requests with clean query parameters', async () => {
+    // Normal alphanumeric input should pass validation
+    const response = await request(app).get('/?name=John');
+
+    expect(response.status).toBe(200);
+    expect(response.text).toBe('Hello, World!\n');
+  });
+});
+
+// =============================================================================
+// Rate Limiting Tests
+// Verify that express-rate-limit protects against request flooding and
+// brute-force attacks via IP-based request rate limiting
+// NOTE: This describe block is intentionally placed LAST to avoid polluting
+// the rate limit counter for other test blocks in the suite
+// =============================================================================
+
+describe('Rate Limiting', () => {
+  // Create an isolated Express app with its own rate limiter to ensure test
+  // independence. Using the shared `app` would exhaust its in-memory rate limit
+  // counter, causing all subsequent tests to receive 429 responses when Jest
+  // randomizes execution order (see Jest --randomize flag).
+  const express = require('express');
+  const { rateLimit } = require('express-rate-limit');
+
+  const rateLimitApp = express();
+  const testLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 100, // 100 requests per window per IP
+    standardHeaders: 'draft-8', // Modern RateLimit headers
+    legacyHeaders: false // Disable X-RateLimit-* headers
+  });
+  rateLimitApp.use(testLimiter);
+  rateLimitApp.get('/', (req, res) => {
+    res.type('text/plain').send('Hello, World!\n');
+  });
+
+  it('should include rate limit headers in responses', async () => {
+    const response = await request(rateLimitApp).get('/');
+
+    // draft-8 standard headers from express-rate-limit (standardHeaders: 'draft-8')
+    expect(response.headers['ratelimit-policy']).toBeDefined();
+  });
+
+  it('should return 429 when rate limit is exceeded', async () => {
+    // Send requests in parallel to exceed the 100-request-per-window rate limit.
+    // Using the isolated rateLimitApp ensures the shared app's rate limiter
+    // is not polluted, preserving test independence across all describe blocks.
+    const promises = [];
+    for (let i = 0; i < 110; i++) {
+      promises.push(request(rateLimitApp).get('/'));
+    }
+
+    const responses = await Promise.all(promises);
+    const has429 = responses.some((r) => r.status === 429);
+
+    expect(has429).toBe(true);
+  }, 30000); // Extended timeout for many concurrent requests
 });
